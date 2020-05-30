@@ -13,24 +13,37 @@ Obtain a copy of Hive from GitHub at https://github.com/apache/hive.
 
 	git clone https://github.com/apache/hive.git
 
-To build the Hive client, you need to first apply this [patch](https://issues.apache.org/jira/secure/attachment/12958418/HIVE-12679.branch-2.3.patch).  Download this patch and move it to your local Hive git repository you created above.  Apply the patch and build Hive.
+To build the Hive client, you need to first apply this [patch](https://issues.apache.org/jira/secure/attachment/12958418/HIVE-12679.branch-2.3.patch).  Download this patch and move it to your local Hive git repository you created above. Apply the patch and build Hive.
 
-	git checkout branch-2.3
+	git checkout tags/rel/release-2.3.5 -b feature/hive-with-glue-2.3.5
+	wget https://issues.apache.org/jira/secure/attachment/12958418/HIVE-12679.branch-2.3.patch
 	patch -p0 <HIVE-12679.branch-2.3.patch
-	mvn clean install -DskipTests
+	sudo apt install maven #(if maven is not installed, assuming ste-up is done on ubuntu)
+	mvn clean install -Pdist -DskipTests
 
-If you are using the default Maven settings, this will install a new version of patched Hive in ~/.m2/repositories/, i.e. ~/.m2/repository/org/apache/hive/hive/2.3.4-SNAPSHOT/.  The specific version of Hive will depend on the current version in pom.xml.  Presently, the latest version in the 2.3 branch (branch-2.3) is "2.3.4-SNAPSHOT".  You will need this version to build the client.
+If you are using the default Maven settings, this will install a new version of patched Hive in ~/.m2/repositories/, i.e. ~/.m2/repository/org/apache/hive/hive/2.3.5/. And tar ball will be generated at $hive_directory/packaging/target/apache-hive-2.3.5-bin.tar.gz
 
 ## Building the Hive Client
 
 Once you have successfully patched and installed Hive locally, move into the AWS Glue Data Catalog Client repository and update the following property in pom.xml.
 
-	<hive2.version>2.3.4-SNAPSHOT</hive2.version>
+	<hive2.version>2.3.5</hive2.version>
+	<spark-hive.version>1.2.1.spark2</spark-hive.version>
 
-You are now ready to build the Hive client.
+You are now ready to build the Hive client. Refer these links if you find any issue in building client jar, follow these links [link1](https://github.com/awslabs/aws-glue-data-catalog-client-for-apache-hive-metastore/issues/21) [link2](https://github.com/awslabs/aws-glue-data-catalog-client-for-apache-hive-metastore/pull/14) [link3](https://github.com/mitochon/aws-glue-data-catalog-client-for-apache-hive-metastore/tree/update-readme).
 
 	cd aws-glue-datacatalog-hive2-client
 	mvn clean package -DskipTests
+
+([ERROR] Failed to execute goal on project aws-glue-datacatalog-hive2-client: Could not resolve dependencies for project com.amazonaws.glue:aws-glue-datacatalog-hive2-client:jar:1.10.0-SNAPSHOT: The following artifacts could not be resolved: com.amazonaws.glue:aws-glue-datacatalog-client-common:jar:1.10.0-SNAPSHOT, com.amazonaws.glue:aws-glue-datacatalog-client-common:jar:tests:1.10.0-SNAPSHOT: Could not find artifact com.amazonaws.glue:aws-glue-datacatalog-client-common:jar:1.10.0-SNAPSHOT -> [Help 1])
+
+Resolution
+	
+	mvn clean install -DskipTests (in shims/common)
+	mvn clean install -DskipTests (in shims)
+	mvn clean install -DskipTests (in aws-glue-datacatalog-client-common)
+	mvn clean install -DskipTests (in aws-glue-data-catalog-client-for-apache-hive-metastore) (may be this step may fail due to compilation error)
+	mvn clean install -DskipTests (in aws-glue-datacatalog-hive2-client)
 
 ## Building the Spark Client
 
@@ -54,12 +67,91 @@ If you have both versions of Hive patched and installed locally, you can build b
 
 ## Configuring Hive to Use the Hive Client
 
-You need to ensure that the AWS Glue Data Catalog Client jar is in Hive's CLASSPATH and also set the "hive.metastore.client.factory.class" HiveConf variable for Hive to pick up and instantiate the AWS Glue Data Catalog Client.  For instance, on Amazon EMR, the client jar is located in /usr/lib/hive/lib/ and the HiveConf is set in /usr/lib/hive/conf/hive-site.xml.
+	cp $hive_directory/packaging/target/apache-hive-2.3.5-bin.tar.gz ~/
+	cd ~/
+	tar -xzvf apache-hive-2.3.5-bin.tar.gz
+	cd apache-hive-2.3.5-bin
 
-	<property>
- 		<name>hive.metastore.client.factory.class</name>
- 		<value>com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory</value>
-	</property>
+open ~/.bashrc and add these lines at end 	
+
+	export HIVE_HOME=/path/to/apache-hive-2.3.5-bin
+	export PATH=$PATH:$HIVE_HOME/bin
+	
+reload bash by running
+
+	`source ~/.bashrc`
+	
+add client jar and other aws dependencies to hive auxlib directory, if auxlib directory not present then create one by running `mkdir $HIVE_HOME/auxlib`
+	
+	cd $HIVE_HOME/auxlib/
+	cp /path/to/aws-glue-datacatalog-hive2-client-1.10.0-SNAPSHOT.jar .
+	wget https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-s3/1.11.566/aws-java-sdk-s3-1.11.566.jar (optional)
+	wget https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-glue/1.11.566/aws-java-sdk-glue-1.11.566.jar
+	wget https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-core/1.11.566/aws-java-sdk-core-1.11.566.jar
+	wget https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk/1.11.566/aws-java-sdk-1.11.566.jar
+	wget https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/2.8.5/hadoop-aws-2.8.5.jar
+	
+Add client and other property to `$HIVE_HOME/conf/hive-site.xml` (if hive-site.xml is not present then create one.)
+	
+	<configuration>
+	  <property>
+	    <name>fs.s3.awsAccessKeyId</name>
+	    <value>awsAccessKeyId</value>
+	  </property>
+	  <property>
+	    <name>fs.s3.awsSecretAccessKey</name>
+	    <value>awsSecretAccessKey</value>
+	  </property>
+	  <property>
+	    <name>fs.defaultFS</name>
+	    <value>s3://defaultFS</value>
+	    <final>true</final>
+	  </property>
+	  <property>
+	    <name>hive.server2.thrift.port</name>
+	    <value>10000</value>
+	  </property>
+	  <property>
+	    <name>datanucleus.fixedDatastore</name>
+	    <value>true</value>
+	  </property>
+	  <property>
+	    <name>hive.metastore.connect.retries</name>
+	    <value>15</value>
+	  </property>
+	  <property>
+	    <name>hive.server2.thrift.http.port</name>
+	    <value>10001</value>
+	  </property>
+	  <property>
+	    <name>hive.imetastoreclient.factory.class</name>
+	    <value>com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory</value>
+	  </property>
+	</configuration>
+
+S3 integration in hive is optional. Without adding s3 properties in hive-site.xml, hive can still able to connect to glue metastore. Run below commands to start hive server.
+To start hive server, HADOOP_HOME must be set, Follow [this](https://docs.aws.amazon.com/emr/latest/ReleaseGuide/images/emr-releases-5x.png) to figure out appropriate aws-sdk and hadoop versions.
+
+HADOOP set-up
+	
+	cd ~/
+	wget https://archive.apache.org/dist/hadoop/core/hadoop-2.8.5/hadoop-2.8.5.tar.gz
+	tar -xzvf hadoop-2.8.5.tar.gz
+	
+Open ~/.bashrc and add following lines at the end to set up hadoop home.
+
+	export HADOOP_HOME=/home/ubuntu/hive-with-glue/hadoop-2.8.5
+	export PATH=$PATH:HADOOP_HOME/bin
+
+Reload bashrc file by running `source ~/.bashrc`, to make HADOOP_HOME variable available.
+Now as we have added properties and required dependencies, we can start hive server.
+	
+	$HIVE_HOME/bin/schematool -dbType derby -initSchema
+	hive --service metastore -p 9083 --hiveconf hive.root.logger=INFO,console
+	hiveserver2 --hiveconf hive.metastore.uris=thrift://localhost:9083 --hiveconf hive.root.logger=INFO,console
+	$HIVE_HOME/bin/beeline -u jdbc:hive2://localhost:10000
+	
+Try querying `show databases`, or `show tables` in beeline to verify.
 
 ## Configuring Spark to Use the Spark Client
 

@@ -162,7 +162,10 @@ public class CatalogToHiveConverter {
     tableMeta.setDbName(dbName);
     tableMeta.setTableName(catalogTable.getName());
     tableMeta.setTableType(catalogTable.getTableType());
-    if (catalogTable.getParameters().containsKey("comment")) {
+    if(catalogTable.getParameters()==null){
+	logger.warn("Found table with null parameter " + catalogTable.getName());	    
+    }
+    if (catalogTable.getParameters()!=null && catalogTable.getParameters().containsKey("comment")) {
       tableMeta.setComments(catalogTable.getParameters().get("comment"));
     }
     return tableMeta;
